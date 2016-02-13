@@ -1,0 +1,65 @@
+function [cfa]=bayerretrieve(image,avgmask,mask,strength)
+
+%This reads in the file, subtracts 'adjmask' and reformats data to be
+%written back to image file
+
+warning('off','all');           %supress warnings
+
+%-Read image file
+info = imfinfo(image);      %inspect image info, thumbnail
+info.SubIFDs{1};            %IFD with image info
+
+t = Tiff(image,'r');            %set image to read
+offsets = getTag(t,'SubIFD');   %offsets contains number which indicates the correct SubIFD; SubIFD is TIFF tag which contains SubIFD designations
+setSubDirectory(t,offsets(1));  %offsets(1) indicates first SubIFD, sets t to now represent SubIFD(1)
+cfa = read(t);
+close(t);
+
+
+%-Crop to only valid pixels
+x_origin = info.SubIFDs{1}.ActiveArea(2)+1; % +1 due to MATLAB indexing
+width = info.SubIFDs{1}.DefaultCropSize(1);
+y_origin = info.SubIFDs{1}.ActiveArea(1)+1;
+height = info.SubIFDs{1}.DefaultCropSize(2);
+cfa = double(cfa(y_origin:y_origin+height-1,x_origin:x_origin+width-1)); %crop
+
+
+
+%-Linearize values from 0 to 1; similar to as described in DNG documentation
+if isfield(info.SubIFDs{1},'LinearizationTable')   %checks for linearization table
+    lintab=info.SubIFDs{1}.LinearizationTable;     %extracts lin table
+    cfa = lintab(cfa+1);                                %converts
+end
+
+black = info.SubIFDs{1}.BlackLevel;             %black levels
+saturation = info.SubIFDs{1}.WhiteLevel;        %saturation level
+lin_bayer = (cfa-black)/(saturation-black);     %   
+lin_bayer = max(0,min(lin_bayer,1));            %remove negative values, values over limit, [0,1]
+cfa=[];                                         %clear cfa
+
+%-Subtract R G and B gradients
+for i=1:3
+    lin_bayer=lin_bayer-avgmask(:,:,i).*mask(:,:,i)*strength;   %strength determines how much gradient reduction
+end
+
+lin_bayer=lin_bayer*(saturation-black);             %reverse saturation
+lin_bayer=lin_bayer+abs(min(min(lin_bayer)));       %remove negative valued points, raise minimum to 0
+
+%-Delinearize image
+[xData, yData] = prepareCurveData( lintab,1:length(lintab));    %prepare lintab values
+curve=fit(xData,yData,'smoothingspline');                       %spline fit function
+
+cfa=round(curve(lin_bayer))-1;      %delinearize with 'curve',-1 to reverse MATLAB indexing adjustment 
+cfa=reshape(cfa,[2592,3872]);       %shape into size
+
+
+cfa=[cfa,zeros(2592,28)];           %resize to sensor active area, this should be based off of image info
+cfa=[cfa;zeros(21,3900)];
+cfa=uint16(cfa);                    %convert to unsigned 16 bit
+
+
+
+
+
+
+
