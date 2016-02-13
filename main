@@ -40,7 +40,7 @@ disp(numdngs)
 
 for i=1:numdngs
     fprintf('Image read: %i\n',i)
-    [a size]=imagereadRGB(char(list(1,dngs(i))),satlim),CFApat;      %a is 3D array output of imageread
+    [a size]=imageread(char(list(1,dngs(i))),satlim),CFApat;      %a is 3D array output of imageread
     Radjmask=Radjmask+a(:,:,1);                        %containing gradient mask to be subtracted
     Gadjmask=Gadjmask+a(:,:,2);                        %in each color
     Badjmask=Badjmask+a(:,:,3);
