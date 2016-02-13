@@ -1,0 +1,25 @@
+function []=imagewrite(image,cfa)
+
+%'imagewrite' writes cfa the modified image array to original image
+
+%-Read image, get info, set directory
+info = imfinfo(image);      %inspect image info, thumbnail
+info=info.SubIFDs{1};            %IFD with image info
+
+warning off MATLAB:tifflib:TIFFReadDirectory:libraryWarning     %suppress warnings
+t = Tiff(image,'r+');           %set image to read/modify
+offsets = getTag(t,'SubIFD');   %offsets contains number which indicates the correct SubIFD; SubIFD is TIFF tag which contains SubIFD designations
+setSubDirectory(t,offsets(1));  
+
+%-Get image parameters
+width = t.getTag('ImageWidth');
+imheight = t.getTag('ImageLength');
+height = t.getTag('RowsPerStrip');
+
+%-Write data to image file
+for i=1:imheight                    %writes data from cfa to the image
+t.writeEncodedStrip(i, cfa(i,:));
+end
+
+t.close();                          
+
