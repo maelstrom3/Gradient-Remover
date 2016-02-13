@@ -1,0 +1,82 @@
+%program accepts Adobe DNG files. pease refer to 
+%http://blogs.mathworks.com/steve/2011/03/08/tips-for-reading-a-camera-raw-file-into-matlab/
+%for info on how to convert raw images to DNG for use in MATLAB.
+
+clear all
+
+%-Input variables
+imgfolder='C:\Users\...';   %target folder with images
+CFApat='gbrg';              %CFA bayer pattern, individual to camera, check wbmask.m 
+satlim=0.3;                 %sensor cutoff value for gradient fit, target 'imagereadRGB'
+strength=1;                 %sets strength of subtraction; multiplies adjmask, target 'bayerretrieve'
+
+
+%-Generate list of images
+list=struct2cell(dir(imgfolder));
+listlength=length(list);
+
+if listlength<=5                    %because then length will flag wrong dimension of 'list'
+    disp('Insufficient images')     %you should be using more than 5 images anyway
+end
+
+k=1;
+for i=1:listlength                  %generates indices of dng files
+    [f,t]=strtok(list(1,i),'.');
+    if strcmp(t,'.dng')             %if .dng, add to list
+        dngs(k)=i;
+        k=k+1;
+    end
+end
+
+
+%-Generate R G B adjustment layers
+numdngs=length(dngs);
+Radjmask=0;                                     %initialize mask values
+Gadjmask=0;
+Badjmask=0;
+
+disp('Number of images to process:')
+disp(numdngs)
+
+for i=1:numdngs
+    fprintf('Image read: %i\n',i)
+    [a size]=imagereadRGB(char(list(1,dngs(i))),satlim),CFApat;      %a is 3D array output of imageread
+    Radjmask=Radjmask+a(:,:,1);                        %containing gradient mask to be subtracted
+    Gadjmask=Gadjmask+a(:,:,2);                        %in each color
+    Badjmask=Badjmask+a(:,:,3);
+end
+
+Radjmask=Radjmask/numdngs;                      %get average
+adjmask(:,:,1)=imresize(Radjmask,size);         %resize to image size  and create final array        
+
+Gadjmask=Gadjmask/numdngs;
+avgmask(:,:,2)k=imresize(Gavgmask,size);            
+
+Badjmask=Badjmask/numdngs;
+adjmask(:,:,3)=imresize(Badjmask,size);            
+
+
+
+%-Create CFA pattern arrays
+mask=zeros(size)+1;                             %array of ones to generate pattern masks of CFA 
+
+wb_R = [1 0 0];
+mask(:,:,1)=wbmask(2592,3872,wb_R,CFApat);      %red pattern
+
+wb_G = [0 1 0];
+mask(:,:,2)=wbmask(2592,3872,wb_G,CFApat);      %green pattern
+
+wb_B = [0 0 1];
+mask(:,:,3)=wbmask(2592,3872,wb_B,CFApat);      %blue pattern
+
+%-Subtract adjust layer
+for i=1:numdngs
+   fprintf('Bayer retrieve: %i \n',i)
+    cfa(:,:,i)=bayerretrieve(char(list(1,dngs(i))),adjmask,mask,strength);
+end
+
+%-Write changes to original files
+for i=1:numdngs
+    fprintf('Image write: %i \n',i)
+    imagewrite(char(list(1,dngs(i))),cfa(:,:,i))
+end
